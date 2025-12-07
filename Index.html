@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Virtual Garden – Bright Flowers, Graves & Fruits</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, sans-serif;
+      background: #f4f5f8;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      min-height: 100vh;
+    }
+
+    .app-shell {
+      max-width: 1200px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid #ddd;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .garden-view {
+      position: relative;
+      flex: 1;
+      min-height: 420px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      background: linear-gradient(
+        to bottom,
+        #cfe9ff 0%,
+        #cfe9ff 65%,
+        #5c8f4d 65%,
+        #5c8f4d 100%
+      );
+    }
+
+    .garden-plants {
+      position: absolute;
+      inset: 0;
+      padding: 80px 40px 80px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 48px;
+    }
+
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: rgba(0, 0, 0, 0.6);
+      font-size: 14px;
+    }
+
+    .plant {
+      position: relative;
+      width: 90px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.3s ease;
+    }
+
+    .plant-inner {
+      display: flex;
+      flex-direction: column-reverse; /* stem at bottom, flower at top */
+      align-items: center;
+    }
+
+    .plant:hover:not(.dead) {
+      transform: translateY(-4px);
+    }
+
+    .stem {
+      width: 6px;
+      background: #2c6d2c;
+      border-radius: 999px;
+      transition: height 0.3s ease, opacity 0.3s ease, filter 0.3s ease;
+    }
+
+    .flower {
+      border-radius: 50%;
+      box-shadow: 0 8px 14px rgba(0, 0, 0, 0.35);
+      transition: width 0.3s, height 0.3s, opacity 0.3s, filter 0.3s,
+        background 0.3s, box-shadow 0.3s, transform 0.2s;
+    }
+
+    .plant.low-health .flower,
+    .plant.low-health .stem {
+      filter: grayscale(0.4) brightness(0.9);
+      opacity: 0.85;
+    }
+
+    .plant.critical .flower,
+    .plant.critical .stem {
+      filter: grayscale(0.85) brightness(0.7);
+      opacity: 0.45;
+    }
+
+    .plant.dead {
+      transform: none;
+    }
+
+    .plant-label {
+      margin-top: 6px;
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+
+    /* Grave marker */
+    .grave {
+      width: 85px;
+      height: 140px;
+      background-image: url("grave.png"); /* make sure this file exists */
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center bottom;
+    }
+
+    /* Wrapper so fruits can orbit around the flower */
+    .flower-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+    }
+
+    .fruit-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .fruit {
+      position: absolute;
+      width: 14px;       /* bigger fruits */
+      height: 14px;
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Fruits on the ground near the stem */
+    .ground-fruit-layer {
+      position: relative;
+      width: 70px;
+      height: 20px;
+      margin-top: 2px;
+    }
+
+    .ground-fruit {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.25);
+      bottom: 0;
+    }
+
+    /* Radiate when talked to */
+    @keyframes radiate {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9);
+      }
+      40% {
+        box-shadow: 0 0 24px 14px rgba(255, 255, 255, 0.5);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+      }
+    }
+
+    .flower.radiant {
+      animation: radiate 1.2s ease-out infinite;
+    }
+
+    /* Shake once when named */
+    @keyframes happyShake {
+      0% {
+        transform: translateX(0);
+      }
+      20% {
+        transform: translateX(-4px);
+      }
+      40% {
+        transform: translateX(4px);
+      }
+      60% {
+        transform: translateX(-3px);
+      }
+      80% {
+        transform: translateX(3px);
+      }
+      100% {
+        transform: translateX(0);
+      }
+    }
+
+    .flower.shake-once {
+      animation: happyShake 0.4s ease-in-out 1;
+    }
+
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #ccc;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover {
+      background: #f8f8f8;
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: #3478f6;
+      color: white;
+      border-color: #3478f6;
+    }
+
+    input[type="text"] {
+      border-radius: 999px;
+      border: 1px solid #ccc;
+      padding: 5px 9px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #3478f6;
+      box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.2);
+    }
+
+    #logBox {
+      border: 1px dashed #ccc;
+      border-radius: 8px;
+      padding: 6px;
+      max-height: 130px;
+      overflow-y: auto;
+      font-size: 11px;
+      background: #fafafa;
+    }
+
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #777;
+      margin-top: 6px;
+    }
+
+    .graveyard-box {
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      font-size: 11px;
+      background: #fdf7f7;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .grave-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 2px 0;
+      color: #aa3e3e;
+    }
+
+    .overlay-popup {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 999;
+    }
+
+    .overlay-popup.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .overlay-inner {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 18px 20px;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- GARDEN -->
+    <div class="panel">
+      <h2>Virtual Garden</h2>
+      <div class="garden-view">
+        <div id="gardenPlants" class="garden-plants"></div>
+        <div id="emptyState" class="empty-state">
+          🌱 No plants yet — click “Plant a new friend”
+        </div>
+      </div>
+      <div id="gardenSummary" style="font-size: 13px; color: #666"></div>
+    </div>
+
+    <!-- CONTROLS + NAME + GRAVEYARD -->
+    <div class="panel controls-panel">
+      <button id="addPlantBtn">🌱 Plant a new friend</button>
+
+      <div class="section-label">Name your flowers</div>
+      <div style="display: flex; gap: 6px">
+        <input type="text" id="nameInput" placeholder="Name the last flower…" />
+        <button id="nameBtn">Name it</button>
+      </div>
+
+      <button id="waterBtn" class="primary">💧 Water all plants</button>
+      <button id="sunBtn">☀️ Give sunlight</button>
+
+      <div class="section-label">Talk to them</div>
+      <div style="display: flex; gap: 6px">
+        <input type="text" id="talkInput" placeholder="Say something nice…" />
+        <button id="talkBtn">🗣 Talk</button>
+      </div>
+
+      <button id="ff1Btn">⏩ Fast-forward 1 day</button>
+      <button id="ff3Btn">⏩ Fast-forward 3 days</button>
+
+      <div class="section-label">Graveyard</div>
+      <div id="graveyardBox" class="graveyard-box">No graves yet 👼</div>
+
+      <div class="section-label">Activity log</div>
+      <div id="logBox"><p>Garden ready.</p></div>
+    </div>
+  </div>
+
+  <!-- Deatth popup -->
+  <div id="deathPopup" class="overlay-popup">
+    <div class="overlay-inner">
+      <h3>⚰️ You just killed a flower.</h3>
+      <p>Shame on you.</p>
+      <button id="deathPopupClose">I’ll do better</button>
+    </div>
+  </div>
+
+  <!-- Max height popup -->
+  <div id="maxPopup" class="overlay-popup">
+    <div class="overlay-inner">
+      <h3>🌳 They reached maximum height!</h3>
+      <p>Keep watering them to grow tiny fruits.</p>
+      <button id="maxPopupClose">Okay</button>
+    </div>
+  </div>
+
+  <script>
+    // --- CONFIG & PERSISTENCE ---
+    const DECAY_PER_HOUR = 3;
+    const WATER_BOOST = 20;
+    const SUN_BOOST = 8;
+    const TALK_BOOST = 5;
+
+    const FLOWER_COLORS = [
+      "#ffbb00",
+      "#fc0384",
+      "#fc7b03",
+      "#3103fc",
+      "#82009c"
+    ];
+
+    const STORAGE_KEY = "virtual_garden_flowers_v1";
+    const MAX_ORBIT_FRUITS = 8;
+    const MAX_GROUND_FRUITS = 10;
+
+    let plants = [];
+    let gardenMaxed = false; 
+    let lastVisit = null;
+
+    function now() {
+      return Date.now();
+    }
+
+    function saveGarden() {
+      const state = {
+        plants,
+        gardenMaxed,
+        lastVisit: now()
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        // ignore if storage fails
+      }
+    }
+
+    function loadGarden() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const state = JSON.parse(raw);
+          plants = state.plants || [];
+          gardenMaxed = !!state.gardenMaxed;
+          lastVisit = state.lastVisit || now();
+        } else {
+          plants = [];
+          gardenMaxed = false;
+          lastVisit = now();
+        }
+      } catch (e) {
+        plants = [];
+        gardenMaxed = false;
+        lastVisit = now();
+      }
+
+      // Apply time-based decay since last visit
+      const elapsedHours = (now() - lastVisit) / (1000 * 60 * 60);
+      if (elapsedHours > 0.05 && plants.length) {
+        applyDecay(elapsedHours, true); // fromLoad = true
+      } else {
+        lastVisit = now();
+        saveGarden();
+        renderGarden();
+      }
+    }
+
+    function pickColor() {
+      const i = Math.floor(Math.random() * FLOWER_COLORS.length);
+      return FLOWER_COLORS[i];
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function log(msg) {
+      const box = document.getElementById("logBox");
+      const p = document.createElement("p");
+      p.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
+      box.appendChild(p);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function showDeathPopup() {
+      document.getElementById("deathPopup").classList.add("show");
+    }
+    function hideDeathPopup() {
+      document.getElementById("deathPopup").classList.remove("show");
+    }
+
+    function showMaxPopup() {
+      document.getElementById("maxPopup").classList.add("show");
+    }
+    function hideMaxPopup() {
+      document.getElementById("maxPopup").classList.remove("show");
+    }
+
+    function addPlant() {
+      const plant = {
+        id: "p_" + Math.random().toString(16).slice(2),
+        name: "Plant " + (plants.length + 1),
+        health: 30, // starts small but alive
+        baseColor: pickColor(),
+        isDead: false,
+        fruits: 0,
+        fallenFruits: 0
+      };
+      plants.push(plant);
+      log("Planted " + plant.name);
+      saveGarden();
+      renderGarden();
+    }
+
+    function nameLastFlower() {
+      const input = document.getElementById("nameInput");
+      const name = input.value.trim();
+      if (!name) return;
+      if (!plants.length) return;
+
+      const last = plants[plants.length - 1];
+      last.name = name;
+      log("You named your last flower: " + name);
+      saveGarden();
+      renderGarden();
+
+      const flowerEl = document.querySelector(
+        '.plant[data-id="' + last.id + '"] .flower'
+      );
+      if (flowerEl) {
+        flowerEl.classList.add("shake-once");
+        setTimeout(() => flowerEl.classList.remove("shake-once"), 450);
+      }
+      input.value = "";
+    }
+
+    function waterAll() {
+      if (!plants.length) return;
+
+      const wasGardenMaxed = gardenMaxed;
+
+      // Regular watering: health increase
+      plants.forEach((p) => {
+        if (!p.isDead) {
+          p.health = clamp(p.health + WATER_BOOST, 0, 100);
+        }
+      });
+
+      // Check if now all alive have reached top (health === 100)
+      const alive = plants.filter((p) => !p.isDead);
+      if (alive.length && alive.every((p) => p.health >= 100)) {
+        if (!gardenMaxed) {
+          gardenMaxed = true;
+          log("All your flowers reached maximum height.");
+          showMaxPopup();
+        }
+      }
+
+
+      // watering now grows fruits on maxed flowers, then drops them lol.
+      if (wasGardenMaxed) {
+        alive.forEach((p) => {
+          if (p.health >= 100) {
+            if (p.fruits == null) p.fruits = 0;
+            if (p.fallenFruits == null) p.fallenFruits = 0;
+
+            if (p.fruits < MAX_ORBIT_FRUITS) {
+              p.fruits += 1; // grow orbit fruits first
+            } else if (p.fallenFruits < MAX_GROUND_FRUITS) {
+              p.fallenFruits += 1; // then fruits start "falling"
+            }
+          }
+        });
+        log("You watered fully grown flowers – fruits appeared (or fell).");
+      } else {
+        log("You watered the plants.");
+      }
+
+      saveGarden();
+      renderGarden();
+    }
+
+    function sunAll() {
+      if (!plants.length) return;
+      plants.forEach((p) => {
+        if (!p.isDead) {
+          p.health = clamp(p.health + SUN_BOOST, 0, 100);
+        }
+      });
+      log("You gave them sunlight.");
+      saveGarden();
+      renderGarden();
+    }
+
+    function talkAll() {
+      const input = document.getElementById("talkInput");
+      const msg = input.value.trim();
+      if (!msg) return;
+      if (!plants.length) return;
+
+      let anyAlive = plants.some((p) => !p.isDead);
+      if (!anyAlive) {
+        log('You said "' + msg + '", but only graves are left.');
+        input.value = "";
+        return;
+      }
+
+      plants.forEach((p) => {
+        if (!p.isDead) {
+          p.health = clamp(p.health + TALK_BOOST, 0, 100);
+        }
+      });
+      log('You said: "' + msg + '". The garden glows a little.');
+
+      saveGarden();
+      renderGarden();
+
+      const flowers = document.querySelectorAll(".flower");
+      flowers.forEach((f) => f.classList.add("radiant"));
+      setTimeout(() => {
+        flowers.forEach((f) => f.classList.remove("radiant"));
+      }, 2500);
+
+      input.value = "";
+    }
+
+    function applyDecay(hours, fromLoad = false) {
+      let killedNow = 0;
+      plants.forEach((p) => {
+        if (p.isDead) return;
+        p.health -= hours * DECAY_PER_HOUR;
+        if (p.health <= 0) {
+          p.health = 0;
+          p.isDead = true;
+          killedNow++;
+        }
+      });
+      lastVisit = now();
+      saveGarden();
+      renderGarden();
+      if (killedNow > 0 && !fromLoad) {
+        log(killedNow + " flower(s) died.");
+        showDeathPopup();
+      }
+    }
+
+    function fastForward(hours) {
+      applyDecay(hours, false);
+    }
+
+    function mixHex(a, b, t) {
+      function hexToRgb(hex) {
+        hex = hex.replace("#", "");
+        const num = parseInt(hex, 16);
+        return {
+          r: (num >> 16) & 255,
+          g: (num >> 8) & 255,
+          b: num & 255
+        };
+      }
+
+      const A = hexToRgb(a);
+      const B = hexToRgb(b);
+      const r = Math.round(A.r + (B.r - A.r) * t);
+      const g = Math.round(A.g + (B.g - A.g) * t);
+      const b2 = Math.round(A.b + (B.b - A.b) * t);
+      return (
+        "#" +
+        [r, g, b2]
+          .map((v) => v.toString(16).padStart(2, "0"))
+          .join("")
+      );
+    }
+
+    function renderGarden() {
+      const cont = document.getElementById("gardenPlants");
+      const empty = document.getElementById("emptyState");
+      const summary = document.getElementById("gardenSummary");
+      const graveBox = document.getElementById("graveyardBox");
+
+      cont.innerHTML = "";
+
+      if (!plants.length) {
+        empty.style.display = "flex";
+        summary.textContent = "No plants yet.";
+        graveBox.textContent = "No graves yet 👼";
+        return;
+      } else {
+        empty.style.display = "none";
+      }
+
+      let aliveCount = 0;
+      let deadCount = 0;
+
+      plants.forEach((p) => {
+        const plantEl = document.createElement("div");
+        plantEl.className = "plant";
+        plantEl.dataset.id = p.id;
+
+        if (p.isDead) {
+          deadCount++;
+          plantEl.classList.add("dead");
+
+          const grave = document.createElement("div");
+          grave.className = "grave";
+          plantEl.appendChild(grave);
+
+          const label = document.createElement("div");
+          label.className = "plant-label";
+          label.textContent = p.name;
+          plantEl.appendChild(label);
+
+          cont.appendChild(plantEl);
+          return;
+        } else {
+          aliveCount++;
+        }
+
+        const inner = document.createElement("div");
+        inner.className = "plant-inner";
+
+        const ratio = clamp(p.health, 0, 100) / 100;
+
+        // Stem: extend higher now so flowers can reach near top
+        const stem = document.createElement("div");
+        stem.className = "stem";
+        const minStem = 10;
+        const maxStem = 260; // tall
+        stem.style.height = minStem + ratio * (maxStem - minStem) + "px";
+
+        // Flower size
+        const base = p.baseColor;
+        const highlight = mixHex(base, "#ffffff", 0.2);
+
+        const minSize = 12;
+        const maxSize = 110;
+        const size = minSize + ratio * (maxSize - minSize);
+
+        // Wrapper so fruits can orbit around flower
+        const wrapper = document.createElement("div");
+        wrapper.className = "flower-wrapper";
+        wrapper.style.width = size + "px";
+        wrapper.style.height = size + "px";
+
+        const flower = document.createElement("div");
+        flower.className = "flower";
+        flower.style.width = size + "px";
+        flower.style.height = size + "px";
+        flower.style.background =
+          "radial-gradient(circle at 30% 30%, " +
+          highlight +
+          ", " +
+          base +
+          ")";
+
+        // Fruits orbiting around the flower (if any)
+        let fruitLayer = null;
+        if (p.fruits && p.fruits > 0) {
+          fruitLayer = document.createElement("div");
+          fruitLayer.className = "fruit-layer";
+
+          const fruitCount = Math.min(p.fruits, MAX_ORBIT_FRUITS);
+          const fruitColors = ["#ff7b00", "#ff3b3b"]; // orange & red
+          const radius = size / 2 + 6;
+
+          for (let i = 0; i < fruitCount; i++) {
+            const fruit = document.createElement("div");
+            fruit.className = "fruit";
+            const col = fruitColors[i % fruitColors.length];
+            fruit.style.background = col;
+
+            // distribute around circle-ish
+            const angle =
+              (i / fruitCount) * Math.PI * 2 +
+              (parseInt(p.id.slice(-2), 16) % 360) * (Math.PI / 180);
+
+            const dx = Math.cos(angle) * radius;
+            const dy = Math.sin(angle) * radius;
+
+            fruit.style.left = "50%";
+            fruit.style.top = "50%";
+            fruit.style.transform =
+              "translate(" + dx + "px," + dy + "px) translate(-50%, -50%)";
+
+            fruitLayer.appendChild(fruit);
+          }
+        }
+
+        if (p.health < 30) {
+          plantEl.classList.add("critical");
+        } else if (p.health < 60) {
+          plantEl.classList.add("low-health");
+        }
+
+        // Ground fruits (fallen)
+        const fallenCount = p.fallenFruits || 0;
+        let groundLayer = null;
+        if (fallenCount > 0) {
+          groundLayer = document.createElement("div");
+          groundLayer.className = "ground-fruit-layer";
+          const fruitColors = ["#ff7b00", "#ff3b3b"];
+          const maxSpread = 70;
+
+          for (let i = 0; i < fallenCount; i++) {
+            const gf = document.createElement("div");
+            gf.className = "ground-fruit";
+            gf.style.background =
+              fruitColors[i % fruitColors.length];
+
+            // random-ish scatter along the width
+            const x = 5 + Math.random() * (maxSpread - 10);
+            gf.style.left = x + "px";
+
+            groundLayer.appendChild(gf);
+          }
+        }
+
+        if (fruitLayer) wrapper.appendChild(fruitLayer);
+        wrapper.appendChild(flower);
+
+        // Build plant layout in DOM order for column-reverse:
+        // first child = bottom, last = top
+        if (groundLayer) inner.appendChild(groundLayer); // bottom-most
+        inner.appendChild(stem);                         // above ground fruits
+        inner.appendChild(wrapper);                      // top: flower & orbit fruits
+
+        plantEl.appendChild(inner);
+
+        const label = document.createElement("div");
+        label.className = "plant-label";
+        label.textContent = p.name;
+        plantEl.appendChild(label);
+
+        cont.appendChild(plantEl);
+      });
+
+      summary.textContent = aliveCount + " alive, " + deadCount + " graves";
+
+      const deadPlants = plants.filter((p) => p.isDead);
+      if (!deadPlants.length) {
+        graveBox.textContent = "No graves yet 👼";
+      } else {
+        graveBox.innerHTML = "";
+        deadPlants.forEach((p) => {
+          const row = document.createElement("div");
+          row.className = "grave-item";
+          row.textContent = "⚰️ " + p.name;
+          graveBox.appendChild(row);
+        });
+      }
+    }
+
+    function init() {
+      document
+        .getElementById("addPlantBtn")
+        .addEventListener("click", addPlant);
+      document
+        .getElementById("nameBtn")
+        .addEventListener("click", nameLastFlower);
+      document
+        .getElementById("waterBtn")
+        .addEventListener("click", waterAll);
+      document.getElementById("sunBtn").addEventListener("click", sunAll);
+      document.getElementById("talkBtn").addEventListener("click", talkAll);
+      document
+        .getElementById("ff1Btn")
+        .addEventListener("click", function () {
+          fastForward(24);
+        });
+      document
+        .getElementById("ff3Btn")
+        .addEventListener("click", function () {
+          fastForward(72);
+        });
+
+      document
+        .getElementById("deathPopupClose")
+        .addEventListener("click", hideDeathPopup);
+      document
+        .getElementById("maxPopupClose")
+        .addEventListener("click", hideMaxPopup);
+
+      loadGarden();
+    }
+
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
